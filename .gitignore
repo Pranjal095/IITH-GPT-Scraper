@@ -8,5 +8,3 @@ icudtl.dat
 rpm.deps
 v8_context_snapshot.bin
 website_data.json
-data
-main.py
