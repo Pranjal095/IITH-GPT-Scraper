@@ -1,0 +1,12 @@
+locales
+__pycache__
+recon
+chrome_debug.log
+chrome-headless-shell
+chromedriver
+icudtl.dat
+rpm.deps
+v8_context_snapshot.bin
+website_data.json
+data
+main.py
