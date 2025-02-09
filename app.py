@@ -1,5 +1,5 @@
 import streamlit as st
-from scraper import perform_scraping, parse_content, save_data, build_index, retrieve_relevant_sections
+from scraper import scrape_page, parse_content, save_data, build_index, retrieve_relevant_sections
 from llm import prompt_llm
 
 st.title("Universal Web Scraper Tool")
@@ -15,7 +15,7 @@ url = st.text_input("Enter the website's URL")
 if st.button("Scrape Site"):
     if url.strip():
         st.write("Scraping the website. This may take a moment...")
-        html = perform_scraping(url)
+        html = scrape_page(url)
         grouped_data = parse_content(html)
         indexed_data = build_index(grouped_data)
         save_data(grouped_data,output_file="website_data.json")

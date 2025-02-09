@@ -6,8 +6,6 @@ beautifulsoup4
 lxml 
 html5lib
 python-dotenv
-time
-json
-re
 sentence-transformers
-faiss
+faiss-cpu
+DrissionPage==4.0.5.6

@@ -1,32 +1,99 @@
-import selenium.webdriver as webdriver
-from selenium.webdriver.chrome.service import Service
 from bs4 import BeautifulSoup
 import numpy as np
-import time
 import json
 import re
 from sentence_transformers import SentenceTransformer
 import faiss
 import json
+import time
+import logging
+import os
+from DrissionPage import ChromiumPage, ChromiumOptions
+from urllib.parse import urljoin
+from cloudfare_bypasser import CloudflareBypasser
 
-def perform_scraping(url):
-    chrome_driver_path = "./chromedriver"
-    chrome_binary_path = "./chrome-headless-shell"
-    options = webdriver.ChromeOptions()
-    options.binary_location = chrome_binary_path
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(service=Service(chrome_driver_path), options=options)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('cloudflare_bypass.log', mode='w')
+    ]
+)
 
+def get_chromium_options(browser_path: str,arguments: list) -> ChromiumOptions:
+    options = ChromiumOptions().auto_port()
+    options.set_paths(browser_path=browser_path)
+    for argument in arguments:
+        options.set_argument(argument)
+    return options
+
+def scrape_page(url):
+    browser_path = os.getenv('CHROME_PATH',"/usr/bin/google-chrome")
+
+    arguments = [
+        "-no-first-run",
+        "-force-color-profile=srgb",
+        "-metrics-recording-only",
+        "-password-store=basic",
+        "-use-mock-keychain",
+        "-export-tagged-pdf",
+        "-no-default-browser-check",
+        "-disable-background-mode",
+        "-enable-features=NetworkService,NetworkServiceInProcess,LoadCryptoTokenExtension,PermuteTLSExtensions",
+        "-disable-features=FlashDeprecationWarning,EnablePasswordsAccountStorage",
+        "-deny-permission-prompts",
+        "-disable-gpu",
+        "-accept-lang=en-US",
+    ]
+
+    options = get_chromium_options(browser_path,arguments)
+
+    driver = ChromiumPage(addr_or_opts=options)
     try:
+        logging.info('Navigating to the page.')
         driver.get(url)
-        print("Page loaded")
-        time.sleep(10)
-        return driver.page_source
+
+        logging.info('Starting Cloudflare bypass.')
+        cf_bypasser = CloudflareBypasser(driver)
+        cf_bypasser.bypass()
+
+        #Wait for JavaScript content to load
+        time.sleep(5)
+
+        page_html = driver.html
+
+        #Extract iframe contents
+        soup = BeautifulSoup(page_html, 'html.parser')
+        for iframe in soup.find_all("iframe"):
+            iframe_src = iframe.get("src")
+
+            if iframe_src:
+                #Convert relative iframe URLs to absolute URLs
+                absolute_iframe_url = urljoin(url, iframe_src)
+                logging.info(f"Switching to iframe: {absolute_iframe_url}")
+
+                driver.get(absolute_iframe_url)
+                time.sleep(2)
+                iframe_html = driver.html
+
+                #Insert the iframe content into the main page
+                iframe.insert_after(BeautifulSoup(
+                    f"<!-- IFRAME CONTENT START -->{iframe_html}<!-- IFRAME CONTENT END -->",
+                    "html.parser"
+                ))
+
+        page_html = str(soup)
+
+    except Exception as e:
+        logging.error("An error occurred: %s", str(e))
+        page_html = ""
     finally:
+        logging.info('Closing the browser.')
         driver.quit()
+
+    return page_html
 
 def clean_text(text):
     return re.sub(r'\s+',' ',text).strip()
@@ -39,7 +106,7 @@ def parse_content(html):
     html = clean_text(html)
 
     soup = BeautifulSoup(html,"html.parser")
-    for tag in soup(["script","style","footer","nav","header"]):
+    for tag in soup(["footer","nav","header"]):
         tag.decompose()
 
 
@@ -78,6 +145,9 @@ def build_index(grouped_data):
     texts = []
     embeddings = []
 
+    if(grouped_data == []):
+        return []
+
     for group in grouped_data:
         title = group['title']
         content = " ".join(group['content'])
@@ -99,7 +169,7 @@ def build_index(grouped_data):
 
     return {"index": index, "texts": texts}
 
-def retrieve_relevant_sections(query, indexed_data,top_k=5):
+def retrieve_relevant_sections(query,indexed_data,top_k=5):
     index = indexed_data["index"]
     texts = indexed_data["texts"]
     model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -107,6 +177,5 @@ def retrieve_relevant_sections(query, indexed_data,top_k=5):
     query_embedding = model.encode(query,normalize_embeddings=True)    
     distances,indices = index.search(np.array([query_embedding]),k=top_k)    
     relevant_sections = [texts[i] for i in indices[0] if i < len(texts)]
-    print(relevant_sections)
 
     return relevant_sections
