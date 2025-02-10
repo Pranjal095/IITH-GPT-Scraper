@@ -18,7 +18,7 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('cloudflare_bypass.log', mode='w')
+        logging.FileHandler('cloudflare_bypass.log',mode='w')
     ]
 )
 
@@ -60,12 +60,12 @@ def scrape_page(url):
         cf_bypasser.bypass()
 
         #Wait for JavaScript content to load
-        time.sleep(5)
+        time.sleep(10)
 
         page_html = driver.html
 
         #Extract iframe contents
-        soup = BeautifulSoup(page_html, 'html.parser')
+        soup = BeautifulSoup(page_html,'html.parser')
         for iframe in soup.find_all("iframe"):
             iframe_src = iframe.get("src")
 
@@ -80,8 +80,7 @@ def scrape_page(url):
 
                 #Insert the iframe content into the main page
                 iframe.insert_after(BeautifulSoup(
-                    f"<!-- IFRAME CONTENT START -->{iframe_html}<!-- IFRAME CONTENT END -->",
-                    "html.parser"
+                    f"{iframe_html}","html.parser"
                 ))
 
         page_html = str(soup)
@@ -106,7 +105,7 @@ def parse_content(html):
     html = clean_text(html)
 
     soup = BeautifulSoup(html,"html.parser")
-    for tag in soup(["footer","nav","header"]):
+    for tag in soup(["footer","nav"]):
         tag.decompose()
 
 
